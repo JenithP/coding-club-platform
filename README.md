@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Exception 코딩학회 플랫폼
 
 Next.js 14 (App Router) + Firebase + Tailwind CSS로 만든 코딩학회 학습 플랫폼.
@@ -60,3 +61,6 @@ npm run dev
 - **퍼즐 / 코드**: 정답+실행 성공 → 만점, 한 쪽만 → 70%, 실행만 성공 → 30%
 - **GitHub**: 제출 시 0점 + `pendingReview=true`. 관리자 패널에서 점수 부여
 - 학생의 `totalScore`는 과제별 최고점의 합 (개선분만 누적)
+=======
+# coding-club-platform
+>>>>>>> 1ede74104e0a0b313cdf4998a9dd733ce34d5289
