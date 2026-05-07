@@ -120,7 +120,7 @@ export default function SignupPage() {
         </form>
 
         <p className="mt-4 text-sm text-gray-600">
-          이미 계정이 있나요? <Link href="/login" className="text-brand-700 underline">로그인</Link>
+          이미 계정이 있나요? <Link href="/login" className="text-lavender-500 underline">로그인</Link>
         </p>
       </div>
     </div>

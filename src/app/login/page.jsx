@@ -59,7 +59,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-sm text-gray-600">
-          아직 계정이 없나요? <Link href="/signup" className="text-brand-700 underline">회원가입</Link>
+          아직 계정이 없나요? <Link href="/signup" className="text-lavender-500 underline">회원가입</Link>
         </p>
       </div>
     </div>

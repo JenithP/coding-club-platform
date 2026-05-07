@@ -45,18 +45,44 @@ async function getPyodide() {
   return pyodidePromise;
 }
 
+// Wrap user code so input() reads from a queue (avoids browser prompt() blocking).
+function wrapCode(userCode, stdin) {
+  const lines = (stdin ?? "").split("\n");
+  const queue = JSON.stringify(lines);
+  return `
+import builtins as __b, sys as __s
+__queue = ${queue}
+def __input(prompt=""):
+    try:
+        __s.stdout.write(str(prompt))
+    except Exception: pass
+    if not __queue:
+        raise EOFError("EOF when reading a line")
+    val = __queue.pop(0)
+    __s.stdout.write(val + "\\n")
+    return val
+__b.input = __input
+del __b, __s, __queue, __input
+
+${userCode}
+`;
+}
+
 export default function PyodideRunner({
   code,
   stdin = "",
   onResult,
   buttonLabel = "실행",
   className = "",
+  autoRunKey = null, // change to trigger auto run
 }) {
   const [status, setStatus] = useState("idle");
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
   const codeRef = useRef(code);
+  const stdinRef = useRef(stdin);
   codeRef.current = code;
+  stdinRef.current = stdin;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,14 +105,12 @@ export default function PyodideRunner({
       py.setStdout({ batched: (s) => (captured += s + "\n") });
       py.setStderr({ batched: (s) => (captured += s + "\n") });
 
-      const wrappedStdin = stdin
-        ? `\nimport io,sys\nsys.stdin = io.StringIO(${JSON.stringify(stdin)})\n`
-        : "";
-      await py.runPythonAsync(wrappedStdin + codeRef.current);
+      await py.runPythonAsync(wrapCode(codeRef.current, stdinRef.current));
 
-      setOutput(captured.trimEnd());
+      const out = captured.replace(/\n+$/, "");
+      setOutput(out);
       setStatus("ready");
-      onResult?.({ stdout: captured.trimEnd(), error: null });
+      onResult?.({ stdout: out, error: null });
     } catch (e) {
       const msg = String(e?.message ?? e);
       setError(msg);
@@ -94,6 +118,11 @@ export default function PyodideRunner({
       onResult?.({ stdout: output, error: msg });
     }
   };
+
+  useEffect(() => {
+    if (autoRunKey != null && status === "ready") run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunKey]);
 
   return (
     <div className={`space-y-2 ${className}`}>
@@ -103,15 +132,19 @@ export default function PyodideRunner({
           disabled={status === "loading" || status === "running"}
           className="btn-primary"
         >
-          {status === "loading" ? "Pyodide 준비 중..." : status === "running" ? "실행 중..." : buttonLabel}
+          {status === "loading"
+            ? "Pyodide 준비 중..."
+            : status === "running"
+            ? "실행 중..."
+            : buttonLabel}
         </button>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-ink-soft">
           {status === "loading" && "처음 한 번만 ~5MB 다운로드합니다"}
           {status === "ready" && "Python 3 (Pyodide) 준비 완료"}
           {status === "error" && "Pyodide 로드 실패"}
         </span>
       </div>
-      <pre className="min-h-[80px] whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100 font-mono">
+      <pre className="min-h-[80px] whitespace-pre-wrap rounded-xl bg-[#1a1a2e] p-4 text-xs text-slate-100 font-mono leading-relaxed">
         {error ? `❌ ${error}` : output || "출력이 여기에 표시됩니다."}
       </pre>
     </div>

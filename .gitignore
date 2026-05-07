@@ -37,3 +37,6 @@ next-env.d.ts
 # IDE
 .vscode/
 .idea/
+
+# local worksheet drafts (admin uploads via UI; not source)
+/*.html

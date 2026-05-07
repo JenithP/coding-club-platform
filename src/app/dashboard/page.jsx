@@ -78,7 +78,7 @@ function DashboardInner() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">{profile?.name ?? "학생"}님, 환영합니다 👋</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-ink-soft">
             {profile?.department} · {profile?.studentId}
           </p>
         </div>
@@ -94,7 +94,7 @@ function DashboardInner() {
       <section className="card">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-lg font-semibold">성장 그래프</h2>
-          <span className="text-xs text-gray-500">제출일 기준 점수</span>
+          <span className="text-xs text-ink-soft">제출일 기준 점수</span>
         </div>
         <GrowthChart data={chartData} />
       </section>
@@ -102,11 +102,11 @@ function DashboardInner() {
       <section className="card">
         <h2 className="text-lg font-semibold">과제 진행 현황</h2>
         {loading ? (
-          <p className="mt-4 text-sm text-gray-500">불러오는 중...</p>
+          <p className="mt-4 text-sm text-ink-soft">불러오는 중...</p>
         ) : assignments.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">등록된 과제가 없습니다.</p>
+          <p className="mt-4 text-sm text-ink-soft">등록된 과제가 없습니다.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-gray-100">
+          <ul className="mt-4 divide-y divide-sand-300/70">
             {assignments.map((a) => {
               const best = bestByAssignment.get(a.id);
               return (
@@ -115,16 +115,22 @@ function DashboardInner() {
                     <Link href={`/assignments/${a.id}`} className="font-medium hover:underline">
                       {a.title}
                     </Link>
-                    <p className="text-xs text-gray-500">
-                      {a.type === "puzzle" ? "퍼즐" : a.type === "github" ? "GitHub 제출" : "코드 실행"}
+                    <p className="text-xs text-ink-soft">
+                      {a.type === "html" || a.worksheetUrl
+                        ? "워크시트"
+                        : a.type === "puzzle"
+                        ? "퍼즐"
+                        : a.type === "github"
+                        ? "GitHub 제출"
+                        : "코드 실행"}
                       {a.dueAt && ` · 마감 ${formatDate(a.dueAt)}`}
                     </p>
                   </div>
                   <div className="text-right">
                     {best ? (
-                      <span className="badge bg-green-100 text-green-700">{best.score}점</span>
+                      <span className="badge bg-mint-100 text-mint-500">{best.score}점</span>
                     ) : (
-                      <span className="badge bg-gray-100 text-gray-600">미제출</span>
+                      <span className="badge bg-sand-200 text-ink-soft">미제출</span>
                     )}
                   </div>
                 </li>
@@ -140,7 +146,7 @@ function DashboardInner() {
 function Stat({ label, value }) {
   return (
     <div className="card">
-      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-soft">{label}</p>
       <p className="mt-2 text-2xl font-bold">{value}</p>
     </div>
   );
