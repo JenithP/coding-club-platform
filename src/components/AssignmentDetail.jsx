@@ -18,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import PuzzleEditor from "@/components/PuzzleEditor";
 import PyodideRunner from "@/components/PyodideRunner";
+import { runPython, getPyodide } from "@/lib/runPython";
 
 const GITHUB_RE = /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i;
 
@@ -35,6 +36,14 @@ export default function AssignmentDetail({ id, onBack }) {
   const [repoUrl, setRepoUrl] = useState("");
   const [repoNote, setRepoNote] = useState("");
 
+  // multicode state: { [problemId]: code }
+  const [problemCodes, setProblemCodes] = useState({});
+  // { [problemId]: { stdout, error } } — live run results
+  const [problemRunResults, setProblemRunResults] = useState({});
+  // { [problemId]: { passed, score, stdout, error } } — grading results
+  const [testResults, setTestResults] = useState({});
+  const [grading, setGrading] = useState(false);
+
   useEffect(() => {
     if (!id || !user) return;
     setLoading(true);
@@ -47,6 +56,11 @@ export default function AssignmentDetail({ id, onBack }) {
       const a = { id: snap.id, ...snap.data() };
       setAssignment(a);
       if (a.type === "code" && a.starterCode) setFreeCode(a.starterCode);
+      if (a.type === "multicode" && Array.isArray(a.problems)) {
+        const codes = {};
+        a.problems.forEach((p) => { codes[p.id] = p.starterCode ?? ""; });
+        setProblemCodes(codes);
+      }
 
       const subSnap = await getDocs(
         query(
@@ -200,6 +214,56 @@ export default function AssignmentDetail({ id, onBack }) {
         </div>
       )}
 
+      {assignment.type === "multicode" && (
+        <MultiCodeSection
+          problems={assignment.problems ?? []}
+          problemCodes={problemCodes}
+          setProblemCodes={setProblemCodes}
+          problemRunResults={problemRunResults}
+          setProblemRunResults={setProblemRunResults}
+          testResults={testResults}
+          grading={grading}
+          submitting={submitting}
+          onGradeAndSubmit={async () => {
+            setGrading(true);
+            setMessage(null);
+            try {
+              // Warm up Pyodide first
+              await getPyodide();
+              const results = {};
+              let totalScore = 0;
+              for (const problem of (assignment.problems ?? [])) {
+                const code = problemCodes[problem.id] ?? "";
+                const tc = problem.testCases?.[0];
+                if (!tc) {
+                  results[problem.id] = { passed: true, score: problem.maxScore ?? 0, stdout: "", error: null };
+                  totalScore += problem.maxScore ?? 0;
+                  continue;
+                }
+                const { stdout, error } = await runPython(code, tc.stdin ?? "");
+                const passed = !error && stdout.includes(tc.expectedContains ?? "");
+                const pMax = problem.maxScore ?? 0;
+                const score = passed ? pMax : (!error ? Math.round(pMax * 0.5) : 0);
+                results[problem.id] = { passed, score, stdout, error };
+                totalScore += score;
+              }
+              setTestResults(results);
+              await persist({
+                type: "multicode",
+                problemResults: Object.entries(results).map(([pid, r]) => ({
+                  id: pid,
+                  code: problemCodes[pid] ?? "",
+                  ...r,
+                })),
+                score: totalScore,
+              });
+            } finally {
+              setGrading(false);
+            }
+          }}
+        />
+      )}
+
       {assignment.type === "github" && (
         <form
           onSubmit={(e) => {
@@ -333,6 +397,7 @@ function Header({ assignment, max, bestScore }) {
     code: ["코드 실행", "bg-mint-100 text-mint-500"],
     github: ["GitHub 제출", "bg-amber-50 text-amber-800"],
     html: ["워크시트", "bg-lavender-100 text-lavender-700"],
+    multicode: ["주간 과제", "bg-mint-100 text-mint-500"],
   };
   const [label, cls] = labels[assignment.type] ?? ["기타", "bg-sand-200 text-ink"];
   return (
@@ -367,6 +432,124 @@ function FlashMessage({ message }) {
       }`}
     >
       {message.text}
+    </div>
+  );
+}
+
+function MultiCodeSection({
+  problems,
+  problemCodes,
+  setProblemCodes,
+  problemRunResults,
+  setProblemRunResults,
+  testResults,
+  grading,
+  submitting,
+  onGradeAndSubmit,
+}) {
+  return (
+    <div className="space-y-6">
+      {problems.map((problem) => {
+        const tr = testResults[problem.id];
+        const runResult = problemRunResults[problem.id];
+        const tc = problem.testCases?.[0];
+        return (
+          <div key={problem.id} className="card space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h2 className="font-bold">{problem.title}</h2>
+              <div className="flex items-center gap-2">
+                {problem.required === false && (
+                  <span className="badge bg-amber-50 text-amber-800">도전</span>
+                )}
+                {problem.required !== false && (
+                  <span className="badge bg-peach-100 text-peach-500">필수</span>
+                )}
+                <span className="text-xs text-ink-soft">{problem.maxScore ?? 0}점</span>
+              </div>
+            </div>
+
+            {problem.description && (
+              <pre className="whitespace-pre-wrap rounded-xl bg-sand-100 px-4 py-3 text-sm leading-relaxed text-ink">
+                {problem.description}
+              </pre>
+            )}
+
+            <div>
+              <label className="label">코드 작성</label>
+              <textarea
+                value={problemCodes[problem.id] ?? ""}
+                onChange={(e) =>
+                  setProblemCodes((prev) => ({ ...prev, [problem.id]: e.target.value }))
+                }
+                spellCheck={false}
+                rows={12}
+                className="block w-full rounded-xl bg-[#1a1a2e] p-3 font-mono text-sm text-slate-100 outline-none ring-1 ring-slate-700 focus:ring-lavender-400"
+              />
+            </div>
+
+            <div>
+              <p className="label mb-1">직접 실행해보기</p>
+              <PyodideRunner
+                code={problemCodes[problem.id] ?? ""}
+                onResult={(r) =>
+                  setProblemRunResults((prev) => ({ ...prev, [problem.id]: r }))
+                }
+                buttonLabel="실행"
+              />
+            </div>
+
+            {tc && (
+              <div
+                className={`flex items-start gap-3 rounded-xl px-4 py-3 text-sm ring-1 ${
+                  tr == null
+                    ? "bg-sand-100 text-ink-soft ring-sand-300"
+                    : tr.passed
+                    ? "bg-mint-100 text-mint-500 ring-mint-300"
+                    : "bg-peach-100 text-peach-500 ring-peach-300"
+                }`}
+              >
+                <span className="mt-0.5 text-base leading-none">
+                  {tr == null ? "⬜" : tr.passed ? "✅" : "❌"}
+                </span>
+                <div className="space-y-1">
+                  <p className="font-semibold">
+                    {tr == null
+                      ? "자동 채점 테스트 케이스"
+                      : tr.passed
+                      ? `통과 — ${tr.score}점`
+                      : `미통과 — ${tr.score}점 (부분 점수)`}
+                  </p>
+                  <p className="text-xs">
+                    입력값: <code className="font-mono">{tc.stdin?.replace(/\n/g, " / ")}</code>
+                    &nbsp;→&nbsp;
+                    출력에 <code className="font-mono">{tc.expectedContains}</code> 포함 여부 확인
+                  </p>
+                  {tr && tr.stdout && (
+                    <p className="text-xs">
+                      실제 출력:{" "}
+                      <code className="font-mono">{tr.stdout.replace(/\n/g, " ↵ ")}</code>
+                    </p>
+                  )}
+                  {tr && tr.error && (
+                    <p className="text-xs text-red-500 break-all">{tr.error}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <button
+        className="btn-primary w-full"
+        disabled={grading || submitting}
+        onClick={onGradeAndSubmit}
+      >
+        {grading ? "채점 중..." : submitting ? "제출 중..." : "채점 후 제출하기"}
+      </button>
+      <p className="text-center text-xs text-ink-soft">
+        채점 버튼을 누르면 각 문제의 테스트 케이스를 자동으로 실행하고 결과를 저장합니다.
+      </p>
     </div>
   );
 }

@@ -12,6 +12,7 @@ function typeBadge(a) {
     puzzle: ["퍼즐", "bg-lavender-100 text-lavender-700"],
     code: ["코드 실행", "bg-mint-100 text-mint-500"],
     github: ["GitHub 제출", "bg-amber-50 text-amber-800"],
+    multicode: ["주간 과제", "bg-mint-100 text-mint-500"],
   };
   return map[a.type] ?? ["기타", "bg-sand-200 text-ink"];
 }
